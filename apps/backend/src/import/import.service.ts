@@ -4,6 +4,10 @@ import { parse } from 'csv-parse';
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+const BATCH_SIZE = 1000;
+const PROGRESS_INTERVAL = 1000;
+const RECENT_BUFFER_SIZE = 20;
+
 @Injectable()
 export class ImportService {
     private readonly logger = new Logger(ImportService.name);
@@ -95,25 +99,51 @@ export class ImportService {
             );
 
         let processedRows = 0;
+        let batch: any[] = [];
+        let recentIds: string[] = [];
 
         try {
 
             for await (const _record of parser) {
-                processedRows++;
+                batch.push({
+                    email: _record.email,
+                    firstName: _record.firstName,
+                    lastName: _record.lastName,
+                });
 
-                // Persist progress every 1000 rows
-                if (processedRows % 1_000 === 0) {
-                    await this.prisma.importState.update({
-                        where: { id: importStateId },
-                        data: { processedRows },
+                if (batch.length >= BATCH_SIZE) {
+                    const createdCustomers = await this.prisma.customer.createMany({
+                        data: batch,
                     });
 
-                    if (processedRows % 100_000 === 0) {
+                    processedRows += createdCustomers.count;
+
+                    batch = [];
+
+                    // Persist progress every 1000 rows
+                    if (processedRows % PROGRESS_INTERVAL === 0) {
+                        await this.prisma.importState.update({
+                            where: { id: importStateId },
+                            data: {
+                                processedRows,
+                                recentCustomerIds: recentIds.slice(-RECENT_BUFFER_SIZE),
+                            },
+                        });
+
                         this.logger.log(
                             `Import ${importStateId}: ${processedRows} rows processed`,
                         );
                     }
                 }
+            }
+
+            // flush remaining batch
+            if (batch.length > 0) {
+                const createdCustomers = await this.prisma.customer.createMany({
+                    data: batch,
+                });
+
+                processedRows += createdCustomers.count;
             }
 
             await this.prisma.importState.update({
@@ -138,7 +168,9 @@ export class ImportService {
     /**
      * Safely marks an import as failed.
      */
-    private async safeFail(importStateId: string, processedRows: number) {
+    private async safeFail(importStateId: string, error: unknown, processedRows: number = 0) {
+        this.logger.error(`Import ${importStateId} failed`, error as any);
+
         try {
             await this.prisma.importState.update({
                 where: { id: importStateId },
