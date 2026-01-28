@@ -46,14 +46,11 @@ export class ImportService {
         this.logger.log(`Import started (id=${importState.id})`);
 
         // Fire-and-forget background execution
-        this.runCsvImport(importState.id).catch(async (err) => {
+        this.runCsvImport(importState.id).catch((err) => {
             this.logger.error(
                 `Unhandled import failure (id=${importState.id})`,
                 err,
             );
-
-            // Ensure state is not left as "running"
-            await this.safeFail(importState.id, 0);
         });
 
         return importState;
@@ -79,7 +76,10 @@ export class ImportService {
 
         this.logger.log(`Reading CSV from ${filePath}`);
 
-        if (!fs.existsSync(filePath)) {
+        try {
+            // async-friendly existence check
+            await fs.promises.access(filePath);
+        } catch {
             throw new Error(`CSV file not found at ${filePath}`);
         }
 
@@ -102,7 +102,7 @@ export class ImportService {
                 processedRows++;
 
                 // Persist progress every 1000 rows
-                if (processedRows % 1000 === 0) {
+                if (processedRows % 1_000 === 0) {
                     await this.prisma.importState.update({
                         where: { id: importStateId },
                         data: { processedRows },
