@@ -17,15 +17,19 @@ export class ImportService {
      */
     async startImport() {
         if (!this.csvFilePath) {
+            this.logger.error('CSV_FILE_PATH is not configured');
             throw new Error('CSV_FILE_PATH environment variable is not set');
         }
 
         const running = await this.prisma.importState.findFirst({
             where: { status: 'running' },
+            select: { id: true },
         });
 
         if (running) {
-            this.logger.warn('Import attempt blocked: import already running');
+            this.logger.warn(
+                `Import start rejected: already running (id=${running.id})`,
+            );
             throw new ConflictException('Import is already running');
         }
 
@@ -42,11 +46,14 @@ export class ImportService {
         this.logger.log(`Import started (id=${importState.id})`);
 
         // Fire-and-forget background execution
-        this.runCsvImport(importState.id).catch((err) => {
+        this.runCsvImport(importState.id).catch(async (err) => {
             this.logger.error(
                 `Unhandled import failure (id=${importState.id})`,
                 err,
             );
+
+            // Ensure state is not left as "running"
+            await this.safeFail(importState.id, 0);
         });
 
         return importState;
@@ -56,9 +63,11 @@ export class ImportService {
      * Returns latest import progress.
      */
     async getProgress() {
-        return this.prisma.importState.findFirst({
+        const progress = await this.prisma.importState.findFirst({
             orderBy: { startedAt: 'desc' },
         });
+
+        return progress ?? { status: 'idle' };
     }
 
     /**
@@ -67,6 +76,7 @@ export class ImportService {
      */
     private async runCsvImport(importStateId: string) {
         const filePath = this.csvFilePath!;
+
         this.logger.log(`Reading CSV from ${filePath}`);
 
         if (!fs.existsSync(filePath)) {
@@ -77,6 +87,7 @@ export class ImportService {
 
         try {
             const stream = fs.createReadStream(filePath);
+
             const rl = readline.createInterface({
                 input: stream,
                 crlfDelay: Infinity,
@@ -92,9 +103,11 @@ export class ImportService {
                         data: { processedRows },
                     });
 
-                    this.logger.debug(
-                        `Import ${importStateId}: processed ${processedRows} rows`,
-                    );
+                    if (processedRows % 100_000 === 0) {
+                        this.logger.log(
+                            `Import ${importStateId}: ${processedRows} rows processed`,
+                        );
+                    }
                 }
             }
 
@@ -113,6 +126,15 @@ export class ImportService {
                 error,
             );
 
+            await this.safeFail(importStateId, processedRows);
+        }
+    }
+
+    /**
+     * Safely marks an import as failed.
+     */
+    private async safeFail(importStateId: string, processedRows: number) {
+        try {
             await this.prisma.importState.update({
                 where: { id: importStateId },
                 data: {
@@ -120,6 +142,11 @@ export class ImportService {
                     processedRows,
                 },
             });
+        } catch (err) {
+            this.logger.error(
+                `Failed to mark import ${importStateId} as failed`,
+                err,
+            );
         }
     }
 }
