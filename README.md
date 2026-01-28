@@ -51,6 +51,14 @@ including backpressure handling, progress persistence, and realtime UI updates.
 
 ---
 
+### API Design Note
+
+The import functionality is exposed under `/import` instead of `/customers`
+to avoid route conflicts and to keep long-running background jobs separated
+from CRUD operations.
+
+---
+
 ## Notes
 
 This README section focuses on architectural intent and design decisions.
