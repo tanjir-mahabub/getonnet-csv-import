@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import * as readline from 'readline';
+import { parse } from 'csv-parse';
 
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -83,17 +83,22 @@ export class ImportService {
             throw new Error(`CSV file not found at ${filePath}`);
         }
 
+        const parser = fs
+            .createReadStream(filePath)
+            .pipe(
+                parse({
+                    columns: true,
+                    skip_empty_lines: true,
+                    relax_quotes: true,
+                    relax_column_count: true,
+                }),
+            );
+
         let processedRows = 0;
 
         try {
-            const stream = fs.createReadStream(filePath);
 
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity,
-            });
-
-            for await (const _line of rl) {
+            for await (const _record of parser) {
                 processedRows++;
 
                 // Persist progress every 1000 rows
