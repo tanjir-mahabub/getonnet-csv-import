@@ -1,9 +1,11 @@
-datasource db {
-    provider = "mongodb"
+generator client {
+    provider   = "prisma-client-js"
+    engineType = "binary"
 }
 
-generator client {
-    provider = "prisma-client-js"
+datasource db {
+    provider = "mongodb"
+    url      = env("DATABASE_URL")
 }
 
 model Customer {
@@ -17,11 +19,11 @@ model Customer {
 }
 
 model ImportState {
-    id                String    @id @default(auto()) @map("_id") @db.ObjectId
-    status            String
-    processedRows     Int
-    totalRows         Int
-    recentCustomerIds String[]
-    startedAt         DateTime?
-    updatedAt         DateTime  @updatedAt
+    id                   String    @id @default(auto()) @map("_id") @db.ObjectId
+    status               String
+    processedRows        Int
+    totalRows            Int
+    recentCustomerEmails String[]
+    startedAt            DateTime?
+    updatedAt            DateTime  @updatedAt
 }

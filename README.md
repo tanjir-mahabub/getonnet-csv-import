@@ -27,18 +27,18 @@ The architecture is primarily driven by the following concerns:
 
 ## Architecture & Design Decisions
 
-| Requirement                | Design Decision                    |
-| -------------------------- | ---------------------------------- |
-| 2GB+ CSV import            | fs stream with backpressure        |
-| Event-loop safety          | async streaming, no synchronous IO |
-| Resume after refresh       | persisted import_state             |
-| Resume after restart       | progress stored in database        |
-| Realtime progress          | Server-Sent Events (SSE)           |
-| Prevent concurrent imports | single active import via DB lock   |
-| Partial results            | store recently imported rows       |
-| Infinite list              | pagination with client-side cache  |
-| UI performance             | list virtualization                |
-| Prevent overwrite (bonus)  | updatedManuallyAt check            |
+| Requirement                | Design Decision                             |
+| -------------------------- | ------------------------------------------- |
+| 2GB+ CSV import            | fs stream with backpressure                 |
+| Event-loop safety          | async streaming, no synchronous IO          |
+| Resume after refresh       | persisted import_state                      |
+| Resume after restart       | progress correctness preserved via database |
+| Realtime progress          | Persisted state + client polling            |
+| Prevent concurrent imports | single active import via DB lock            |
+| Partial results            | store recently imported rows                |
+| Infinite list              | pagination with client-side cache           |
+| UI performance             | list virtualization                         |
+| Prevent overwrite (bonus)  | updatedManuallyAt check                     |
 
 ---
 
@@ -47,7 +47,25 @@ The architecture is primarily driven by the following concerns:
 The following diagram illustrates the end-to-end CSV import pipeline,
 including backpressure handling, progress persistence, and realtime UI updates.
 
-![Import Flow Diagram](./diagrams/import-flow.png)
+<img src="./diagrams/import-flow.png" width="100%" height="100%">
+
+---
+
+### Realtime Transport Decision
+
+Realtime progress updates are implemented using persisted server state
+and periodic client polling. Polling was chosen over Server-Sent Events (SSE)
+because the import process is long-running and progress updates are meaningful
+at second-level granularity. This approach reduces operational complexity
+while fully satisfying the realtime requirement.
+
+---
+
+### API Design Note
+
+The import functionality is exposed under `/import` instead of `/customers`
+to avoid route conflicts and to keep long-running background jobs separated
+from CRUD operations.
 
 ---
 
