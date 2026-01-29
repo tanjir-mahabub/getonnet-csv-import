@@ -77,6 +77,8 @@ The import API enforces a single active import by rejecting new
 - Partial progress is not lost on failure
 - Duplicate customers are safely skipped
 - Import state is marked `FAILED` on unhandled errors
+- On process restart, the import restarts from the beginning while preserving
+  correct progress state and preventing data corruption
 
 ## Performance Characteristics
 
