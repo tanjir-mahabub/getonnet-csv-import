@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import { parse } from 'csv-parse';
 
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeCustomer } from '../common/utils/normalizeCustomer';
 import { ImportStatus } from './import-status.enum';
@@ -28,8 +28,16 @@ export class ImportService {
             throw new Error('CSV_FILE_PATH environment variable is not set');
         }
 
-        const importState = await this.prisma.$transaction(async (prisma) => {
+        try {
+            await fs.promises.access(this.csvFilePath);
+        } catch {
+            this.logger.error(`CSV file not found at ${this.csvFilePath}`);
+            throw new BadRequestException(
+                `CSV file not found at ${this.csvFilePath}`,
+            );
+        }
 
+        const importState = await this.prisma.$transaction(async (prisma) => {
             const running = await prisma.importState.findFirst({
                 where: { status: ImportStatus.RUNNING },
                 select: { id: true },
@@ -93,12 +101,6 @@ export class ImportService {
         const filePath = this.csvFilePath!;
 
         this.logger.log(`Reading CSV from ${filePath}`);
-
-        try {
-            await fs.promises.access(filePath);
-        } catch {
-            throw new Error(`CSV file not found at ${filePath}`);
-        }
 
         const parser = fs
             .createReadStream(filePath)
