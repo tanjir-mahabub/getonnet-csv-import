@@ -1,98 +1,107 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Backend – CSV Import & Customer API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+This backend service is responsible for:
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+- Importing very large CSV files (2GB+) without blocking the Node.js event loop
+- Persisting import progress for resilience
+- Exposing APIs for import status and customer CRUD
 
-## Description
+---
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Setup
 
-## Project setup
+1. Install dependencies
 
-```bash
-$ pnpm install
-```
+   ```
+   pnpm install
+   ```
 
-## Compile and run the project
+2. Configure environment variables
 
-```bash
-# development
-$ pnpm run start
+   ```
+   DATABASE_URL='mongodb://localhost:27017/getonnet_db'
+   CSV_FILE_PATH=data/customers-2000000.csv
+   ```
 
-# watch mode
-$ pnpm run start:dev
+3. Run the server
+   ```
+   pnpm dev
+   ```
 
-# production mode
-$ pnpm run start:prod
-```
+---
 
-## Run tests
+## API Endpoints
 
-```bash
-# unit tests
-$ pnpm run test
+### Import
 
-# e2e tests
-$ pnpm run test:e2e
+- **POST /import/sync**
+  Starts a CSV import. Rejects if an import is already running.
 
-# test coverage
-$ pnpm run test:cov
-```
+- **GET /import/progress**
+  Returns latest import progress.
 
-## Deployment
+### Customers
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+- **GET /customers** – List customers (paginated)
+- **GET /customers/:id** – Get customer details
+- **POST /customers** – Create a customer
+- **PATCH /customers/:id** – Update a customer
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## CSV Import Flow
 
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
+1. Client triggers `POST /import/sync`
+2. ImportState is created with status `RUNNING`
+3. CSV file is streamed using `fs.createReadStream`
+4. Rows are parsed incrementally
+5. Rows are accumulated into batches
+6. Batches are inserted using Prisma createMany
+7. Progress is persisted periodically
+8. ImportState is marked `COMPLETED` when finished
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### Import State Lifecycle
 
-## Resources
+The CSV import process is represented by a persisted `ImportState` record
+with the following lifecycle states:
 
-Check out a few resources that may come in handy when working with NestJS:
+- `IDLE` – No import has been started yet
+- `RUNNING` – An import is currently in progress
+- `COMPLETED` – The CSV file has been fully processed successfully
+- `FAILED` – The import was interrupted due to an unrecoverable error
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+The import API enforces a single active import by rejecting new
+`/import/sync` requests while the state is `RUNNING`.
 
-## Support
+## Failure Handling
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+- Import state is always persisted
+- Partial progress is not lost on failure
+- Duplicate customers are safely skipped
+- Import state is marked `FAILED` on unhandled errors
+- On process restart, the import restarts from the beginning while preserving
+  correct progress state and preventing data corruption
 
-## Stay in touch
+## Performance Characteristics
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- Streaming-based CSV parsing
+- Bounded memory usage
+- Batched database writes
+- Rate-limited progress persistence
+- Import locking prevents overload
 
-## License
+---
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+### MongoDB Duplicate Handling Note
+
+When using MongoDB, Prisma does not support `skipDuplicates` with `createMany`.
+To ensure idempotent imports, duplicate records are detected and skipped
+explicitly during batch insertion.
+
+---
+
+## Out of Scope / Not Implemented
+
+- Authentication & authorization
+- Horizontal scaling of import workers
+- Distributed locking
+
+---
