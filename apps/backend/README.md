@@ -90,6 +90,15 @@ The import API enforces a single active import by rejecting new
 
 ---
 
+### In-Memory De-duplication Note
+
+During CSV import, an in-memory Set is used to avoid inserting duplicate
+emails within a single import run. This Set is intentionally scoped to the
+lifetime of the import process and is not persisted across restarts.
+
+Database-level unique constraints ensure correctness and prevent data
+corruption across multiple import runs or process restarts.
+
 ### MongoDB Duplicate Handling Note
 
 When using MongoDB, Prisma does not support `skipDuplicates` with `createMany`.

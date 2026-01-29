@@ -1,9 +1,10 @@
 import * as fs from 'fs';
 import { parse } from 'csv-parse';
 
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeCustomer } from '../common/utils/normalizeCustomer';
+import { ImportStatus } from './import-status.enum';
 
 const BATCH_SIZE = 1000;
 const PROGRESS_INTERVAL = 1000;
@@ -18,6 +19,7 @@ export class ImportService {
 
     /**
      * Starts a CSV import if no other import is running.
+     * Uses DB transaction to avoid race conditions.
      * Returns immediately after creating ImportState.
      */
     async startImport() {
@@ -26,26 +28,37 @@ export class ImportService {
             throw new Error('CSV_FILE_PATH environment variable is not set');
         }
 
-        const running = await this.prisma.importState.findFirst({
-            where: { status: 'running' },
-            select: { id: true },
-        });
-
-        if (running) {
-            this.logger.warn(
-                `Import start rejected: already running (id=${running.id})`,
+        try {
+            await fs.promises.access(this.csvFilePath);
+        } catch {
+            this.logger.error(`CSV file not found at ${this.csvFilePath}`);
+            throw new BadRequestException(
+                `CSV file not found at ${this.csvFilePath}`,
             );
-            throw new ConflictException('Import is already running');
         }
 
-        const importState = await this.prisma.importState.create({
-            data: {
-                status: 'running',
-                processedRows: 0,
-                totalRows: 2_000_000,
-                recentCustomerEmails: [],
-                startedAt: new Date(),
-            },
+        const importState = await this.prisma.$transaction(async (prisma) => {
+            const running = await prisma.importState.findFirst({
+                where: { status: ImportStatus.RUNNING },
+                select: { id: true },
+            });
+
+            if (running) {
+                this.logger.warn(
+                    `Import start rejected: already running (id=${running.id})`,
+                );
+                throw new ConflictException('Import is already running');
+            }
+
+            return prisma.importState.create({
+                data: {
+                    status: ImportStatus.RUNNING,
+                    processedRows: 0,
+                    totalRows: 2_000_000,
+                    recentCustomerEmails: [],
+                    startedAt: new Date(),
+                },
+            });
         });
 
         this.logger.log(`Import started (id=${importState.id})`);
@@ -70,12 +83,13 @@ export class ImportService {
         });
 
         return progress ?? {
-            "status": "idle",
+            "status": ImportStatus.IDLE,
             "processedRows": 0,
             "totalRows": 2_000_000,
             "recentCustomerEmails": [],
             "startedAt": null,
-            "updatedAt": null
+            "updatedAt": null,
+            "errorMessage": null,
         };
     }
 
@@ -87,12 +101,6 @@ export class ImportService {
         const filePath = this.csvFilePath!;
 
         this.logger.log(`Reading CSV from ${filePath}`);
-
-        try {
-            await fs.promises.access(filePath);
-        } catch {
-            throw new Error(`CSV file not found at ${filePath}`);
-        }
 
         const parser = fs
             .createReadStream(filePath)
@@ -165,12 +173,13 @@ export class ImportService {
             await this.prisma.importState.update({
                 where: { id: importStateId },
                 data: {
-                    status: 'completed',
+                    status: ImportStatus.COMPLETED,
                     processedRows: readRows,
                 },
             });
 
             this.logger.log(`Import ${importStateId} completed | read=${readRows}, inserted=${insertedRows}`);
+
         } catch (error) {
             this.logger.error(
                 `Import ${importStateId} failed after ${readRows} rows`,
@@ -203,9 +212,13 @@ export class ImportService {
                     inserted++;
                 } catch (err: any) {
                     if (err.code === 'P2002') {
-                        this.logger.warn(
-                            `Duplicate skipped: ${customer.email}`,
-                        );
+                        await this.prisma.customer.updateMany({
+                            where: {
+                                email: customer.email,
+                                updatedManuallyAt: null,
+                            },
+                            data: customer,
+                        });
                     } else {
                         throw err;
                     }
@@ -226,8 +239,9 @@ export class ImportService {
             await this.prisma.importState.update({
                 where: { id: importStateId },
                 data: {
-                    status: 'failed',
+                    status: ImportStatus.FAILED,
                     processedRows,
+                    errorMessage: (error as Error).message || String(error),
                 },
             });
         } catch (err) {
