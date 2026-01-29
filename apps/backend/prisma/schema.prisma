@@ -26,4 +26,5 @@ model ImportState {
     recentCustomerEmails String[]
     startedAt            DateTime?
     updatedAt            DateTime  @updatedAt
+    errorMessage         String?
 }
