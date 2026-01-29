@@ -17,8 +17,11 @@ This backend service is responsible for:
    ```
 
 2. Configure environment variables
-   - DATABASE_URL
-   - CSV_FILE_PATH
+
+   ```
+   DATABASE_URL='mongodb://localhost:27017/getonnet_db'
+   CSV_FILE_PATH=data/customers-2000000.csv
+   ```
 
 3. Run the server
    ```
@@ -31,29 +34,29 @@ This backend service is responsible for:
 
 ### Import
 
-- POST /import/sync
+- **POST /import/sync**
   Starts a CSV import. Rejects if an import is already running.
 
-- GET /import/progress
+- **GET /import/progress**
   Returns latest import progress.
 
 ### Customers
 
-- GET /customers
-- GET /customers/:id
-- POST /customers
-- PATCH /customers/:id
+- **GET /customers** – List customers (paginated)
+- **GET /customers/:id** – Get customer details
+- **POST /customers** – Create a customer
+- **PATCH /customers/:id** – Update a customer
 
 ## CSV Import Flow
 
-1. Client triggers POST /import/sync
-2. ImportState is created with status=RUNNING
-3. CSV file is streamed using fs.createReadStream
+1. Client triggers `POST /import/sync`
+2. ImportState is created with status `RUNNING`
+3. CSV file is streamed using `fs.createReadStream`
 4. Rows are parsed incrementally
 5. Rows are accumulated into batches
 6. Batches are inserted using Prisma createMany
 7. Progress is persisted periodically
-8. ImportState is marked COMPLETED when finished
+8. ImportState is marked `COMPLETED` when finished
 
 ### Import State Lifecycle
 
@@ -73,7 +76,7 @@ The import API enforces a single active import by rejecting new
 - Import state is always persisted
 - Partial progress is not lost on failure
 - Duplicate customers are safely skipped
-- Import state is marked FAILED on unhandled errors
+- Import state is marked `FAILED` on unhandled errors
 
 ## Performance Characteristics
 
@@ -90,6 +93,8 @@ The import API enforces a single active import by rejecting new
 When using MongoDB, Prisma does not support `skipDuplicates` with `createMany`.
 To ensure idempotent imports, duplicate records are detected and skipped
 explicitly during batch insertion.
+
+---
 
 ## Out of Scope / Not Implemented
 

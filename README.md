@@ -47,7 +47,7 @@ The architecture is primarily driven by the following concerns:
 The following diagram illustrates the end-to-end CSV import pipeline,
 including backpressure handling, progress persistence, and realtime UI updates.
 
-![Import Flow Diagram](./diagrams/import-flow.png)
+<img src="./diagrams/import-flow.png" width="100%" height="100%">
 
 ---
 
