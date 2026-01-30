@@ -1,73 +1,81 @@
-# React + TypeScript + Vite
+# Frontend – CSV Import UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This frontend application provides a real-time UI for importing a very large CSV file and managing customers. It is designed to stay responsive, show smooth progress updates, and restore state after page refresh.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Tech Stack
 
-## React Compiler
+- React 19
+- TypeScript
+- Fetch API
+- Polling for realtime updates
+- requestAnimationFrame for smooth progress animation
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## Key Features
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### CSV Import Progress
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- Shows processed rows, skipped rows, percent, rate, elapsed time, and ETA
+- Progress is restored after page refresh
+- Displays recently imported customers (last N)
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Smooth Progress Bar
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- Progress bar animates smoothly (no sudden jumps)
+- Backend updates can be chunked, UI interpolation keeps it fluid
+
+### Customers List
+
+- Infinite scrolling list
+- Already fetched pages are cached in memory
+- Scrolling back does not trigger extra API calls
+
+---
+
+## Architecture Overview
+
+- Backend persists import state in DB
+- Frontend polls `/import/progress`
+- Metrics (percent, ETA, rate) are calculated on the frontend
+- UI never relies on guessed values
+
+---
+
+## Important Hooks
+
+- `useImportProgress` – handles polling and progress fetch
+- `useImportMetrics` – derives percent, ETA, elapsed safely
+- `useSmoothProgress` – animates progress bar smoothly
+
+---
+
+## Safety & UX Decisions
+
+- All values are clamped (no negative ETA, no >100% progress)
+- Local ticking clock keeps ETA/elapsed live
+- Polling starts only when import is running
+
+---
+
+## Running the Frontend
+
+```bash
+cd apps/frontend
+pnpm install
+pnpm dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Scope Notes
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- No authentication (not required)
+- Polling used instead of SSE for simplicity and reliability
+- UI polish kept minimal; focus is correctness and performance
+
+---
+
+This frontend is built to be resilient, performant, and easy to reason about while handling very large imports.

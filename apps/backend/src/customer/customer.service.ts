@@ -13,12 +13,16 @@ export class CustomerService {
     async create(createCustomerDto: CreateCustomerDto) {
         this.logger.log(`Creating customer ${createCustomerDto.email}`);
         return this.prisma.customer.create({
-            data: createCustomerDto,
+            data: {
+                ...createCustomerDto,
+                updatedManuallyAt: new Date(),
+            },
         });
     }
 
     async update(id: string, updateCustomerDto: UpdateCustomerDto) {
         this.logger.log(`Manually updating customer ${id}`);
+
         return this.prisma.customer.update({
             where: { id },
             data: {

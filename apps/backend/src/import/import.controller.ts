@@ -1,4 +1,4 @@
-import { Controller, Get, Post } from '@nestjs/common';
+import { Controller, Get, Post, Header } from '@nestjs/common';
 import { ImportService } from './import.service';
 
 @Controller('import')
@@ -11,6 +11,7 @@ export class ImportController {
     }
 
     @Get('progress')
+    @Header('Cache-Control', 'no-store')
     getProgress() {
         return this.importService.getProgress();
     }
