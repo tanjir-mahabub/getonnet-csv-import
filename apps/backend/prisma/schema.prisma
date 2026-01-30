@@ -27,13 +27,15 @@ model Customer {
 }
 
 model ImportState {
-    id                   String    @id @default(auto()) @map("_id") @db.ObjectId
-    status               ImportStatus @default(IDLE)
-    processedRows        Int
-    lastProcessedRow     Int
-    recentCustomerEmails String[]
-    totalRows            Int
-    startedAt            DateTime?
-    updatedAt            DateTime  @updatedAt
-    errorMessage         String?
+  id                  String       @id @default(auto()) @map("_id") @db.ObjectId
+  status              ImportStatus
+  processedRows       Int
+  skippedRows         Int           @default(0)
+  lastProcessedRow    Int
+  totalRows           Int
+  startedAt           DateTime?
+  completedAt         DateTime?
+  updatedAt           DateTime      @updatedAt
+  errorMessage        String?
+  recentCustomerEmails String[]
 }

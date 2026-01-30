@@ -6,11 +6,15 @@ export function CustomersSectionView({
     loadMore,
     hasMore,
     loading,
+    error,
+    resetAndReload,
 }: {
     customers: Customer[];
     loadMore: () => void;
     hasMore: boolean;
     loading: boolean;
+    error?: string | null;
+    resetAndReload: () => void;
 }) {
     return (
         <section style={{ marginTop: 40 }}>
@@ -21,6 +25,8 @@ export function CustomersSectionView({
                 loadMore={loadMore}
                 hasMore={hasMore}
                 loading={loading}
+                error={error}
+                resetAndReload={resetAndReload}
             />
         </section>
     );

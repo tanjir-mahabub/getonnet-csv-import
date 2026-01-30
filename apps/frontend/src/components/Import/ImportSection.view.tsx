@@ -1,27 +1,52 @@
 import { StatusBadge } from '../StatusBadge';
 import { ProgressBar } from '../ProgressBar';
 import { Metric } from '../Metric';
+import { PrimaryButton } from '../ui/PrimaryButton';
 import type { ImportProgress } from '../../api/types';
 
 export function ImportSectionView({
     data,
     metrics,
     error,
-    isRunning,
     isInterrupted,
+    isCompleted,
     buttonLabel,
     starting,
     onStart,
 }: {
-    data: ImportProgress;
-    metrics: { percent: number; rate: number; eta: number | null };
+    data: ImportProgress | null;
+    metrics: {
+        percent: number;
+        elapsed: number;
+        rate: number;
+        eta: number;
+        skipped: number;
+    } | null;
     error: string | null;
-    isRunning: boolean;
     isInterrupted: boolean;
+    isCompleted: boolean;
     buttonLabel: string;
     starting: boolean;
     onStart: () => void;
 }) {
+    if (!data || !metrics) {
+        return (
+            <section>
+                <h2>CSV Import</h2>
+                <PrimaryButton onClick={onStart}>
+                    Start Import
+                </PrimaryButton>
+            </section>
+        );
+    }
+
+    const processed = data.processedRows ?? 0;
+    const skipped = data.skippedRows ?? 0;
+    const total = data.totalRows ?? 0;
+    const percent = Math.min(100, Math.max(0, metrics.percent));
+
+    const isRunning = data.status === 'RUNNING';
+
     return (
         <section
             style={{
@@ -31,55 +56,88 @@ export function ImportSectionView({
                 boxShadow: '0 8px 24px rgba(0,0,0,0.06)',
             }}
         >
-            <h2>CSV Import</h2>
+            {/* ================= HEADER ================= */}
+            <div
+                style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                }}
+            >
+                <h2 style={{ margin: 0 }}>CSV Import</h2>
 
-            <StatusBadge status={data.status} />
-
-            <div style={{ margin: '16px 0' }}>
-                <ProgressBar value={metrics.percent} />
+                <PrimaryButton
+                    onClick={onStart}
+                    disabled={isRunning || starting}
+                >
+                    {isRunning
+                        ? 'Import Running…'
+                        : starting
+                            ? 'Starting…'
+                            : buttonLabel}
+                </PrimaryButton>
             </div>
 
+            {/* ================= STATUS ================= */}
+            <div style={{ marginTop: 8 }}>
+                <StatusBadge status={data.status} />
+            </div>
+
+            {/* ================= PROGRESS ================= */}
+            <div style={{ margin: '16px 0' }}>
+                <ProgressBar value={percent} />
+            </div>
+
+            {/* ================= METRICS ================= */}
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                 <Metric
                     label="Processed"
-                    value={`${data.processedRows.toLocaleString()} / ${data.totalRows.toLocaleString()}`}
+                    value={`${processed.toLocaleString()} / ${total.toLocaleString()}`}
                 />
-                <Metric label="Rate" value={`${metrics.rate} rows/sec`} />
-                {metrics.eta !== null && (
-                    <Metric label="ETA" value={`${metrics.eta} sec`} />
-                )}
+                <Metric
+                    label="Skipped"
+                    value={skipped.toLocaleString()}
+                />
+                <Metric
+                    label="Elapsed"
+                    value={`${metrics.elapsed}s`}
+                />
+                <Metric
+                    label="Rate"
+                    value={`${metrics.rate} rows/sec`}
+                />
+                <Metric
+                    label="ETA"
+                    value={`${metrics.eta}s`}
+                />
             </div>
 
+            {/* ================= RECENT ROWS ================= */}
+            {data.recentCustomerEmails.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                    <h4>Recently Imported</h4>
+                    <ul style={{ maxHeight: 120, overflowY: 'auto' }}>
+                        {data.recentCustomerEmails.map((email) => (
+                            <li key={email}>{email}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {/* ================= WARNINGS ================= */}
             {isInterrupted && (
                 <div style={{ marginTop: 12, color: '#b45309' }}>
-                    ⚠ Import was interrupted. You can safely resume.
+                    ⚠ Import interrupted. You can safely resume.
                 </div>
             )}
 
-            {data.status === 'failed' && (
-                <div style={{ marginTop: 12, color: '#dc2626' }}>
-                    ❌ Import failed: {data.errorMessage}
+            {isCompleted && (
+                <div style={{ marginTop: 12, color: '#166534' }}>
+                    ✅ Import completed successfully
                 </div>
             )}
 
-            <button
-                disabled={starting || isRunning}
-                onClick={onStart}
-                style={{
-                    marginTop: 20,
-                    padding: '10px 18px',
-                    borderRadius: 10,
-                    background: '#2563eb',
-                    color: '#fff',
-                    border: 'none',
-                    fontWeight: 600,
-                    opacity: isRunning ? 0.6 : 1,
-                    cursor: isRunning ? 'not-allowed' : 'pointer',
-                }}
-            >
-                {starting ? 'Starting…' : buttonLabel}
-            </button>
-
+            {/* ================= ERROR ================= */}
             {error && (
                 <div style={{ marginTop: 12, color: '#dc2626' }}>
                     {error}
