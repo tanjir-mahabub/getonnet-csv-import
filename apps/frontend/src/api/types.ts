@@ -1,17 +1,21 @@
 export type ImportStatus =
-    | 'idle'
-    | 'running'
-    | 'interrupted'
-    | 'completed'
-    | 'failed';
+    | 'IDLE'
+    | 'RUNNING'
+    | 'INTERRUPTED'
+    | 'COMPLETED'
+    | 'FAILED';
 
 export interface ImportProgress {
     status: ImportStatus;
     processedRows: number;
+    skippedRows: number;
+    lastProcessedRow: number;
     totalRows: number;
     recentCustomerEmails: string[];
     startedAt: string | null;
     updatedAt?: string | null;
+    completedAt?: string | null;
+
     errorMessage?: string | null;
 }
 

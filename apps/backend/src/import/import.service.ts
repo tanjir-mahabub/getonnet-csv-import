@@ -1,223 +1,200 @@
 import * as fs from 'fs';
 import { parse } from 'csv-parse';
-
-import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
+import {
+    BadRequestException,
+    Injectable,
+    Logger,
+    OnModuleInit,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { normalizeCustomer } from '../common/utils/normalizeCustomer';
 import { ImportStatus } from './import-status.enum';
-
-const BATCH_SIZE = 1000;
-const PROGRESS_INTERVAL = 1000;
-const RECENT_BUFFER_SIZE = 20;
+import {
+    BATCH_SIZE,
+    PROGRESS_INTERVAL,
+    RECENT_BUFFER_SIZE,
+    TOTAL_ROWS,
+} from '../common/utils/constants';
+import { normalizeCustomer } from '../common/utils/normalizeCustomer';
 
 @Injectable()
-export class ImportService {
+export class ImportService implements OnModuleInit {
     private readonly logger = new Logger(ImportService.name);
-    private readonly csvFilePath = process.env.CSV_FILE_PATH;
+    private readonly csvFilePath = process.env.CSV_FILE_PATH!;
 
     constructor(private readonly prisma: PrismaService) { }
 
-    /**
-     * Starts a CSV import if no other import is running.
-     * Uses DB transaction to avoid race conditions.
-     * Returns immediately after creating ImportState.
-     */
+    /* ================= INIT ================= */
+    async onModuleInit() {
+        const running = await this.prisma.importState.findFirst({
+            where: { status: ImportStatus.RUNNING },
+        });
+
+        if (running) {
+            await this.prisma.importState.update({
+                where: { id: running.id },
+                data: { status: ImportStatus.INTERRUPTED },
+            });
+        }
+    }
+
+    /* ================= START ================= */
     async startImport() {
-        if (!this.csvFilePath) {
-            this.logger.error('CSV_FILE_PATH is not configured');
-            throw new Error('CSV_FILE_PATH environment variable is not set');
-        }
+        await this.ensureCsvExists();
 
-        try {
-            await fs.promises.access(this.csvFilePath);
-        } catch {
-            this.logger.error(`CSV file not found at ${this.csvFilePath}`);
-            throw new BadRequestException(
-                `CSV file not found at ${this.csvFilePath}`,
-            );
-        }
-
-        const importState = await this.prisma.$transaction(async (prisma) => {
-            const running = await prisma.importState.findFirst({
-                where: { status: ImportStatus.RUNNING },
-                select: { id: true },
+        const importState = await this.prisma.$transaction(async (tx) => {
+            const latest = await tx.importState.findFirst({
+                orderBy: { startedAt: 'desc' },
             });
 
-            if (running) {
-                this.logger.warn(
-                    `Import start rejected: already running (id=${running.id})`,
-                );
-                throw new ConflictException('Import is already running');
+            if (latest?.status === ImportStatus.RUNNING) {
+                return latest;
             }
 
-            return prisma.importState.create({
+            if (latest?.status === ImportStatus.INTERRUPTED) {
+                await tx.importState.update({
+                    where: { id: latest.id },
+                    data: { status: ImportStatus.RUNNING, errorMessage: null },
+                });
+
+                setImmediate(() => this.runCsvImport(latest.id));
+                return { ...latest, status: ImportStatus.RUNNING };
+            }
+
+            return tx.importState.create({
                 data: {
                     status: ImportStatus.RUNNING,
                     processedRows: 0,
-                    totalRows: 2_000_000,
+                    skippedRows: 0,
+                    lastProcessedRow: 0,
+                    totalRows: TOTAL_ROWS,
                     recentCustomerEmails: [],
                     startedAt: new Date(),
                 },
             });
         });
 
-        this.logger.log(`Import started (id=${importState.id})`);
-
-        // Fire-and-forget background execution
-        this.runCsvImport(importState.id).catch((err) => {
-            this.logger.error(
-                `Unhandled import failure (id=${importState.id})`,
-                err,
-            );
-        });
-
+        setImmediate(() => this.runCsvImport(importState.id));
         return importState;
     }
 
-    /**
-     * Returns latest import progress.
-     */
     async getProgress() {
-        const progress = await this.prisma.importState.findFirst({
+        return this.prisma.importState.findFirst({
             orderBy: { startedAt: 'desc' },
         });
-
-        return progress ?? {
-            "status": ImportStatus.IDLE,
-            "processedRows": 0,
-            "totalRows": 2_000_000,
-            "recentCustomerEmails": [],
-            "startedAt": null,
-            "updatedAt": null,
-            "errorMessage": null,
-        };
     }
 
-    /**
-     * Core CSV streaming logic.
-     * Event-loop safe, progress persisted, failure-safe.
-     */
+    /* ================= CORE ================= */
     private async runCsvImport(importStateId: string) {
-        const filePath = this.csvFilePath!;
+        const state = await this.prisma.importState.findUnique({
+            where: { id: importStateId },
+        });
+        if (!state) return;
 
-        this.logger.log(`Reading CSV from ${filePath}`);
+        let currentRow = 0;
+        let processedRows = state.processedRows;
+        let skippedRows = state.skippedRows;
+        let lastPersisted = processedRows;
+
+        let batch: any[] = [];
+        let recentEmails: string[] = [];
 
         const parser = fs
-            .createReadStream(filePath)
+            .createReadStream(this.csvFilePath)
             .pipe(
                 parse({
                     columns: true,
                     skip_empty_lines: true,
-                    relax_quotes: true,
                     relax_column_count: true,
+                    relax_quotes: true,
+                    trim: true,
                 }),
             );
 
-        let readRows = 0;
-        let insertedRows = 0;
-        let lastPersisted = 0;
-
-        let batch: any[] = [];
-        let recentEmails: string[] = [];
-        const seenEmails = new Set<string>();
-
         try {
             for await (const record of parser) {
-                readRows++;
+                currentRow++;
+
+                if (currentRow <= state.lastProcessedRow) continue;
 
                 const customer = normalizeCustomer(record);
-                if (!customer) continue;
-
-                if (seenEmails.has(customer.email)) continue;
-                seenEmails.add(customer.email);
+                if (!customer) {
+                    skippedRows++;
+                    continue;
+                }
 
                 batch.push(customer);
 
                 if (batch.length >= BATCH_SIZE) {
-                    const inserted = await this.insertBatchSafely(batch);
-                    insertedRows += inserted;
-
-                    if (inserted === 0) {
-                        this.logger.warn(
-                            `Batch processed but 0 rows inserted. Possible CSV mapping or duplicate issue.`,
-                        );
-                    }
+                    const inserted = await this.insertBatch(batch);
+                    processedRows += inserted;
 
                     recentEmails.push(...batch.map((c) => c.email));
                     batch = [];
 
-                    // Persist progress every 1000 rows
-                    if (readRows - lastPersisted >= PROGRESS_INTERVAL) {
-                        await this.prisma.importState.update({
-                            where: { id: importStateId },
-                            data: {
-                                processedRows: readRows,
-                                recentCustomerEmails: recentEmails.slice(-RECENT_BUFFER_SIZE),
-                            },
-                        });
-
-                        lastPersisted = readRows;
-
-                        this.logger.log(
-                            `Import ${importStateId}: read=${readRows}, inserted=${insertedRows}`,
+                    if (processedRows - lastPersisted >= PROGRESS_INTERVAL) {
+                        await this.persistProgress(
+                            importStateId,
+                            processedRows,
+                            skippedRows,
+                            currentRow,
+                            recentEmails,
                         );
+                        lastPersisted = processedRows;
                     }
                 }
             }
 
-            // flush remaining batch
-            if (batch.length > 0) {
-                insertedRows += await this.insertBatchSafely(batch);
+            if (batch.length) {
+                const inserted = await this.insertBatch(batch);
+                processedRows += inserted;
+
+                await this.persistProgress(
+                    importStateId,
+                    processedRows,
+                    skippedRows,
+                    currentRow,
+                    recentEmails,
+                );
             }
 
             await this.prisma.importState.update({
                 where: { id: importStateId },
                 data: {
                     status: ImportStatus.COMPLETED,
-                    processedRows: readRows,
+                    processedRows,
+                    skippedRows,
+                    lastProcessedRow: currentRow,
+                    completedAt: new Date(),
                 },
             });
-
-            this.logger.log(`Import ${importStateId} completed | read=${readRows}, inserted=${insertedRows}`);
-
-        } catch (error) {
-            this.logger.error(
-                `Import ${importStateId} failed after ${readRows} rows`,
-                error,
-            );
-
-            await this.safeFail(importStateId, error, readRows);
+        } catch (e) {
+            await this.fail(importStateId, e, processedRows, skippedRows);
         }
     }
 
-    /**
-     * MongoDB-safe batch insertion with duplicate handling.
-     */
-    private async insertBatchSafely(batch: any[]): Promise<number> {
+    /* ================= FAST INSERT ================= */
+    private async insertBatch(batch: any[]): Promise<number> {
         try {
             const result = await this.prisma.customer.createMany({
                 data: batch,
             });
-            return result.count;
-        } catch (error: any) {
-            if (error.code !== 'P2002') {
-                throw error;
-            }
 
-            // Fallback path (only when duplicates exist)
+            return result.count;
+        } catch {
             let inserted = 0;
-            for (const customer of batch) {
+
+            for (const c of batch) {
                 try {
-                    await this.prisma.customer.create({ data: customer });
+                    await this.prisma.customer.create({ data: c });
                     inserted++;
                 } catch (err: any) {
                     if (err.code === 'P2002') {
                         await this.prisma.customer.updateMany({
                             where: {
-                                email: customer.email,
+                                email: c.email,
                                 updatedManuallyAt: null,
                             },
-                            data: customer,
+                            data: c,
                         });
                     } else {
                         throw err;
@@ -228,27 +205,45 @@ export class ImportService {
             return inserted;
         }
     }
+    /* ================= PROGRESS ================= */
+    private async persistProgress(
+        id: string,
+        processedRows: number,
+        skippedRows: number,
+        row: number,
+        emails: string[],
+    ) {
+        await this.prisma.importState.update({
+            where: { id },
+            data: {
+                processedRows,
+                skippedRows,
+                lastProcessedRow: row,
+                recentCustomerEmails: emails.slice(-RECENT_BUFFER_SIZE),
+            },
+        });
+    }
 
-    /**
-     * Safely marks an import as failed.
-     */
-    private async safeFail(importStateId: string, error: unknown, processedRows: number = 0) {
-        this.logger.error(`Import ${importStateId} failed`, error as any);
+    private async fail(
+        id: string,
+        error: unknown,
+        processedRows: number,
+        skippedRows: number,
+    ) {
+        await this.prisma.importState.update({
+            where: { id },
+            data: {
+                status: ImportStatus.FAILED,
+                processedRows,
+                skippedRows,
+                errorMessage: String(error),
+            },
+        });
+    }
 
-        try {
-            await this.prisma.importState.update({
-                where: { id: importStateId },
-                data: {
-                    status: ImportStatus.FAILED,
-                    processedRows,
-                    errorMessage: (error as Error).message || String(error),
-                },
-            });
-        } catch (err) {
-            this.logger.error(
-                `Failed to mark import ${importStateId} as failed`,
-                err,
-            );
-        }
+    private async ensureCsvExists() {
+        await fs.promises.access(this.csvFilePath).catch(() => {
+            throw new BadRequestException('CSV file not found');
+        });
     }
 }

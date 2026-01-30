@@ -1,33 +1,47 @@
-import { useEffect, useState } from "react";
-import { fetchImportProgress } from "../api/import.api";
-import type { ImportProgress } from "../api/types";
+import { useEffect, useRef, useState } from 'react';
+import type { ImportProgress } from '../api/types';
+import { fetchImportProgress } from '../api/import.api';
 
-export function useImportProgress(pollIntervalMs: number = 1500) {
+export function useImportProgress(
+    enabled: boolean,
+    pollIntervalMs: number = 1500,
+) {
     const [data, setData] = useState<ImportProgress | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const timerRef = useRef<number | null>(null);
+
+    const load = async () => {
+        try {
+            const response = await fetchImportProgress();
+            setData(response);
+            setError(null);
+        } catch (e: any) {
+            setError(e.message ?? 'Failed to fetch import progress');
+        }
+    };
 
     useEffect(() => {
-        let timer: number;
+        load();
+    }, []);
 
-        const load = async () => {
-            try {
-                const response = await fetchImportProgress();
-                setData(response);
-                setError(null);
+    useEffect(() => {
+        if (!enabled) {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+            return;
+        }
 
-                if (response.status !== 'running') {
-                    clearInterval(timer);
-                }
-            } catch (e: unknown) {
-                setError(e instanceof Error ? e.message : "Failed to fetch import progress");
+        timerRef.current = window.setInterval(load, pollIntervalMs);
+
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
             }
         };
-
-        load();
-        timer = window.setInterval(load, pollIntervalMs);
-
-        return () => clearInterval(timer);
-    }, [pollIntervalMs]);
+    }, [enabled, pollIntervalMs]);
 
     return { data, error };
 }

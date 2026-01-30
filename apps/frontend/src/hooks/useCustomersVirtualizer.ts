@@ -2,58 +2,60 @@ import { useRef, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Customer } from '../api/types';
 
-const LOAD_MORE_THRESHOLD_PX = 200;
-
 export function useCustomersVirtualizer({
     customers,
     hasMore,
     loadMore,
     loading,
+    error,
     rowHeight = 48,
 }: {
     customers: Customer[];
     hasMore: boolean;
     loadMore: () => void;
     loading: boolean;
+    error?: string | null;
     rowHeight?: number;
 }) {
     const parentRef = useRef<HTMLDivElement>(null);
-    const fetchingRef = useRef(false);
+    const lockRef = useRef(false);
 
     const virtualizer = useVirtualizer({
         count: hasMore ? customers.length + 1 : customers.length,
         getScrollElement: () => parentRef.current,
         estimateSize: () => rowHeight,
-        overscan: 10,
+        overscan: 8,
     });
 
-    // scroll-position based infinite trigger (robust)
+    const items = virtualizer.getVirtualItems();
+    const lastItem = items[items.length - 1];
+
     useEffect(() => {
-        const el = parentRef.current;
-        if (!el) return;
+        if (
+            !lastItem ||
+            lastItem.index < customers.length - 1 ||
+            !hasMore ||
+            loading ||
+            error ||
+            lockRef.current
+        ) {
+            return;
+        }
 
-        const onScroll = () => {
-            const remaining =
-                el.scrollHeight - el.scrollTop - el.clientHeight;
-
-            if (
-                remaining < LOAD_MORE_THRESHOLD_PX &&
-                hasMore &&
-                !loading &&
-                !fetchingRef.current
-            ) {
-                fetchingRef.current = true;
-                loadMore();
-            }
-        };
-
-        el.addEventListener('scroll', onScroll);
-        return () => el.removeEventListener('scroll', onScroll);
-    }, [hasMore, loading, loadMore]);
+        lockRef.current = true;
+        loadMore();
+    }, [
+        lastItem?.index,
+        customers.length,
+        hasMore,
+        loading,
+        error,
+        loadMore,
+    ]);
 
     useEffect(() => {
         if (!loading) {
-            fetchingRef.current = false;
+            lockRef.current = false;
         }
     }, [loading]);
 

@@ -1,17 +1,17 @@
-interface Props {
-    value: number;
-}
+import { useSmoothProgress } from '../hooks/useSmoothProgress';
 
-export function ProgressBar({ value }: Props) {
+export function ProgressBar({ value }: { value: number }) {
+    const smooth = useSmoothProgress(value, 600);
+
     return (
-        <div style={{ height: 12, background: '#eee', borderRadius: 6 }}>
+        <div style={{ height: 12, background: '#e5e7eb', borderRadius: 6 }}>
             <div
                 style={{
-                    width: `${value}%`,
+                    width: `${smooth}%`,
                     height: '100%',
-                    background: '#4caf50',
+                    background:
+                        'linear-gradient(90deg, #4caf50, #66bb6a)',
                     borderRadius: 6,
-                    transition: 'width 0.3s',
                 }}
             />
         </div>

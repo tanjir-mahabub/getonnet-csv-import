@@ -3,7 +3,7 @@ import type { Customer, CustomersResponse } from "./types";
 
 export function fetchCustomers(
     page: number,
-    limit = 20,
+    limit = 50,
 ): Promise<CustomersResponse> {
     return http(`/customers?page=${page}&limit=${limit}`);
 }
