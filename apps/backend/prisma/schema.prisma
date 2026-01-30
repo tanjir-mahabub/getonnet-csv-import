@@ -8,6 +8,14 @@ datasource db {
     url      = env("DATABASE_URL")
 }
 
+enum ImportStatus {
+    IDLE
+    RUNNING
+    INTERRUPTED
+    COMPLETED
+    FAILED
+}
+
 model Customer {
     id                String    @id @default(auto()) @map("_id") @db.ObjectId
     email             String    @unique
@@ -20,10 +28,11 @@ model Customer {
 
 model ImportState {
     id                   String    @id @default(auto()) @map("_id") @db.ObjectId
-    status               String
+    status               ImportStatus @default(IDLE)
     processedRows        Int
-    totalRows            Int
+    lastProcessedRow     Int
     recentCustomerEmails String[]
+    totalRows            Int
     startedAt            DateTime?
     updatedAt            DateTime  @updatedAt
     errorMessage         String?

@@ -1,6 +1,7 @@
 export enum ImportStatus {
-    IDLE = 'idle',
-    RUNNING = 'running',
-    COMPLETED = 'completed',
-    FAILED = 'failed',
+    IDLE = 'IDLE',
+    RUNNING = 'RUNNING',
+    INTERRUPTED = 'INTERRUPTED',
+    COMPLETED = 'COMPLETED',
+    FAILED = 'FAILED',
 }
