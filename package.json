@@ -1,8 +1,11 @@
 {
   "name": "getonnet-csv-import",
   "private": true,
+  "packageManager": "pnpm@10.28.2",
   "scripts": {
-    "dev": "pnpm -r dev",
-    "build": "pnpm -r build"
+    "setup": "pnpm --filter backend setup",
+    "dev": "pnpm --parallel --filter backend --filter frontend dev",
+    "backend": "pnpm --filter backend dev",
+    "frontend": "pnpm --filter frontend dev"
   }
 }

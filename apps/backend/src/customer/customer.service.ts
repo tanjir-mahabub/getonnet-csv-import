@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { Customer } from '@prisma/client';
+import { isValidObjectId } from '../common/utils/objectid.util';
 
 @Injectable()
 export class CustomerService {
@@ -38,23 +39,24 @@ export class CustomerService {
         });
     }
 
-    async findMany(page = 1, limit = 20): Promise<{
-        items: Customer[];
-        page: number;
-        limit: number;
-        total: number;
-    }> {
-        const skip = (page - 1) * limit;
+    async findManyCursor(cursor?: string, limit = 20) {
+        if (cursor && !isValidObjectId(cursor)) {
+            throw new BadRequestException('Invalid cursor');
+        }
 
-        const [items, total] = await Promise.all([
-            this.prisma.customer.findMany({
-                skip,
-                take: limit,
-                orderBy: { createdAt: 'desc' },
+        const items = await this.prisma.customer.findMany({
+            take: limit,
+            ...(cursor && {
+                cursor: { id: cursor },
+                skip: 1,
             }),
-            this.prisma.customer.count(),
-        ]);
+            orderBy: { id: 'desc' },
+        })
 
-        return { items, page, limit, total };
+        return {
+            items,
+            nextCursor: items.length ? items[items.length - 1].id : null,
+            hasMore: items.length === limit,
+        }
     }
 }

@@ -25,6 +25,14 @@ export class ImportService implements OnModuleInit {
 
     /* ================= INIT ================= */
     async onModuleInit() {
+        if (!this.csvFilePath) {
+            throw new Error('CSV_FILE_PATH is not set');
+        }
+
+        if (!fs.existsSync(this.csvFilePath)) {
+            this.logger.error(`CSV file not found at ${this.csvFilePath}`);
+        }
+
         const running = await this.prisma.importState.findFirst({
             where: { status: ImportStatus.RUNNING },
         });
@@ -242,8 +250,11 @@ export class ImportService implements OnModuleInit {
     }
 
     private async ensureCsvExists() {
-        await fs.promises.access(this.csvFilePath).catch(() => {
+        try {
+            await fs.promises.access(this.csvFilePath);
+        } catch {
+            this.logger.error(`CSV file not found: ${this.csvFilePath}`);
             throw new BadRequestException('CSV file not found');
-        });
+        }
     }
 }

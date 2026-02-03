@@ -2,6 +2,8 @@ import { useRef, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Customer } from '../api/types';
 
+const LOAD_AHEAD = 5;
+
 export function useCustomersVirtualizer({
     customers,
     hasMore,
@@ -24,7 +26,7 @@ export function useCustomersVirtualizer({
         count: hasMore ? customers.length + 1 : customers.length,
         getScrollElement: () => parentRef.current,
         estimateSize: () => rowHeight,
-        overscan: 8,
+        overscan: 4,
     });
 
     const items = virtualizer.getVirtualItems();
@@ -33,7 +35,7 @@ export function useCustomersVirtualizer({
     useEffect(() => {
         if (
             !lastItem ||
-            lastItem.index < customers.length - 1 ||
+            lastItem.index < customers.length - LOAD_AHEAD ||
             !hasMore ||
             loading ||
             error ||
@@ -54,10 +56,8 @@ export function useCustomersVirtualizer({
     ]);
 
     useEffect(() => {
-        if (!loading) {
-            lockRef.current = false;
-        }
-    }, [loading]);
+        lockRef.current = false;
+    }, [customers.length]);
 
     return { parentRef, virtualizer };
 }

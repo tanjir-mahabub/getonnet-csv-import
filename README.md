@@ -12,6 +12,92 @@ CRUD operations and efficient frontend rendering.
 
 ---
 
+## Quick Start
+
+## Setup
+
+### Prerequisites
+
+Make sure the following are installed on your machine:
+
+- Node.js **18+**
+- **pnpm**
+- **MongoDB** running locally
+
+---
+
+### Install Dependencies & Environment Files
+
+From the project root:
+
+```bash
+pnpm install
+
+cp apps/backend/.env.example apps/backend/.env
+cp apps/frontend/.env.example apps/frontend/.env
+```
+
+---
+
+### CSV File Setup (Required)
+
+This project expects a large CSV file to be present locally for the import
+process.
+
+Create a `data` directory inside the backend app and place your CSV file there:
+
+```bash
+mkdir -p apps/backend/data
+```
+
+Example file structure:
+
+```text
+apps/backend/data/customers-2000000.csv
+```
+
+Update the backend environment configuration accordingly:
+
+```env
+CSV_FILE_PATH=apps/backend/data/customers-2000000.csv
+```
+
+> ⚠️ **Important**
+> The import will fail if the CSV file does not exist at the configured path.
+
+---
+
+### Database & Application Startup
+
+Run the following commands from the project root:
+
+```bash
+pnpm setup
+pnpm dev
+```
+
+This will:
+
+- Generate the Prisma client and apply database migrations
+- Start both backend and frontend applications in parallel
+
+---
+
+### Local Services
+
+- **Backend API:** `http://localhost:3000`
+- **Frontend UI:** `http://localhost:5173`
+
+---
+
+### Setup Notes
+
+- The CSV file is intentionally **not committed** to the repository.
+- You may use any large CSV file with the expected schema for testing.
+- Import progress is persisted and survives browser refreshes and server restarts.
+
+---
+
 ## Architectural Drivers
 
 The architecture is primarily driven by the following concerns:

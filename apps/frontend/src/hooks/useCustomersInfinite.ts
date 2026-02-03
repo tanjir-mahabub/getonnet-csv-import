@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { fetchCustomers } from '../api/customers.api';
 import type { Customer } from '../api/types';
+import { mergeUniqueById } from '../utils/mergeUniqueById';
 
 export function useCustomersInfinite(pageSize = 50) {
     const [customers, setCustomers] = useState<Customer[]>([]);
-    const [page, setPage] = useState(1);
+    const [cursor, setCursor] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -20,39 +21,31 @@ export function useCustomersInfinite(pageSize = 50) {
         setError(null);
 
         try {
-            const res = await fetchCustomers(page, pageSize);
+            const res = await fetchCustomers(cursor, pageSize);
 
-            setCustomers((prev) => [...prev, ...res.items]);
+            setCustomers((prev) => mergeUniqueById(prev, res.items));
 
-            if (res.items.length === 0) {
-                setHasMore(false);
-            } else if (typeof res.hasMore === 'boolean') {
-                setHasMore(res.hasMore);
-            } else {
-                setHasMore(res.items.length === pageSize);
-            }
-
-            setPage((p) => p + 1);
+            setCustomers((prev) => mergeUniqueById(prev, res.items));
+            setHasMore(res.hasMore);
+            setCursor(res.nextCursor);
         } catch (e) {
             setError('We couldn’t load customers right now.');
         } finally {
             loadingRef.current = false;
             setLoading(false);
         }
-    }, [page, hasMore, pageSize]);
+    }, [cursor, hasMore, pageSize]);
 
     const resetAndReload = useCallback(() => {
         loadingRef.current = false;
         didInitRef.current = false;
 
         setCustomers([]);
-        setPage(1);
+        setCursor(null);
         setHasMore(true);
         setError(null);
 
-        setTimeout(() => {
-            loadMore();
-        }, 0);
+        setTimeout(() => loadMore(), 0);
     }, [loadMore]);
 
     useEffect(() => {

@@ -15,11 +15,11 @@ export class CustomerController {
 
     @Get()
     getAllCustomers(
-        @Query('page') page?: string,
+        @Query('cursor') cursor?: string,
         @Query('limit') limit?: string,
     ) {
-        return this.service.findMany(
-            page ? Number(page) : 1,
+        return this.service.findManyCursor(
+            cursor,
             limit ? Number(limit) : 20,
         );
     }
