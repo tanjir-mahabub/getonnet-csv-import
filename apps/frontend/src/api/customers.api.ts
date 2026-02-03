@@ -2,14 +2,20 @@ import { http } from "./http";
 import type { Customer, CustomersResponse } from "./types";
 
 export function fetchCustomers(
-    page: number,
+    cursor?: string | null,
     limit = 50,
 ): Promise<CustomersResponse> {
-    return http(`/customers?page=${page}&limit=${limit}`);
+    const params = new URLSearchParams();
+
+    if (cursor) params.set('cursor', cursor);
+
+    params.set('limit', String(limit));
+
+    return http(`/customers?${params.toString()}`);
 }
 
 export function fetchCustomerById(id: string): Promise<Customer> {
-    return http(`/customers/id/${id}`);
+    return http(`/customers/${id}`);
 }
 
 export function createCustomer(
@@ -25,7 +31,7 @@ export function updateCustomer(
     id: string,
     payload: Partial<Pick<Customer, 'name' | 'phone'>>,
 ): Promise<Customer> {
-    return http(`/customers/id/${id}`, {
+    return http(`/customers/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(payload),
     });

@@ -30,8 +30,6 @@ export interface Customer {
 
 export interface CustomersResponse {
     items: Customer[];
-    page: number;
-    limit: number;
-    total: number;
+    nextCursor: string | null;
     hasMore: boolean;
 }
