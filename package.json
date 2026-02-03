@@ -3,10 +3,9 @@
   "private": true,
   "packageManager": "pnpm@10.28.2",
   "scripts": {
-    "setup": "pnpm backend:setup",
-    "backend:setup": "pnpm --filter backend setup",
+    "setup": "pnpm --filter backend setup",
+    "dev": "pnpm --parallel --filter backend --filter frontend dev",
     "backend": "pnpm --filter backend dev",
-    "frontend": "pnpm --filter frontend dev",
-    "dev": "pnpm -r --parallel dev"
+    "frontend": "pnpm --filter frontend dev"
   }
 }
