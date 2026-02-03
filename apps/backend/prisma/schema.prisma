@@ -24,18 +24,20 @@ model Customer {
     updatedManuallyAt DateTime?
     createdAt         DateTime  @default(now())
     updatedAt         DateTime  @updatedAt
+
+    @@index([createdAt])
 }
 
 model ImportState {
-  id                  String       @id @default(auto()) @map("_id") @db.ObjectId
-  status              ImportStatus
-  processedRows       Int
-  skippedRows         Int           @default(0)
-  lastProcessedRow    Int
-  totalRows           Int
-  startedAt           DateTime?
-  completedAt         DateTime?
-  updatedAt           DateTime      @updatedAt
-  errorMessage        String?
-  recentCustomerEmails String[]
+    id                   String       @id @default(auto()) @map("_id") @db.ObjectId
+    status               ImportStatus
+    processedRows        Int
+    skippedRows          Int          @default(0)
+    lastProcessedRow     Int
+    totalRows            Int
+    startedAt            DateTime?
+    completedAt          DateTime?
+    updatedAt            DateTime     @updatedAt
+    errorMessage         String?
+    recentCustomerEmails String[]
 }
