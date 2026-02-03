@@ -17,11 +17,20 @@ This backend service is responsible for:
    ```
 
 2. Configure environment variables
+   Create a `.env` file based on `.env.example`:
+
+   ```
+   cp .env.example .env
+   ```
+
+   Then Set:
 
    ```
    DATABASE_URL='mongodb://localhost:27017/getonnet_db'
    CSV_FILE_PATH=data/customers-2000000.csv
    ```
+
+   CSV_FILE_PATH is resolved relative to the backend project root.
 
 3. Run the server
    ```
@@ -42,7 +51,7 @@ This backend service is responsible for:
 
 ### Customers
 
-- **GET /customers** – List customers (paginated)
+- **GET /customers** – List customers (cursor-based pagination, infinite scroll friendly)
 - **GET /customers/:id** – Get customer details
 - **POST /customers** – Create a customer
 - **PATCH /customers/:id** – Update a customer
