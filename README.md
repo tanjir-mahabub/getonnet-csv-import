@@ -2,6 +2,8 @@
 
 StreamForge is a production-minded engineering showcase for importing multi-gigabyte CSV datasets without blocking Node.js or exhausting process memory. It combines a NestJS streaming pipeline with a recruiter-friendly React operations console.
 
+**Live demo:** https://tanjir-mahabub.github.io/getonnet-csv-import/
+
 ## Live product experience
 
 The public frontend runs as a safe interactive simulation: upload any CSV, start/pause/resume the pipeline, monitor throughput and ETA, inspect data-quality signals, search/filter records, and explore the architecture. No visitor data is uploaded; selected files are used only to estimate workload size in the browser.
