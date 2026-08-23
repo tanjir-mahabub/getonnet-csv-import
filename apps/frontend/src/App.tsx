@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import './batch.css'
+import './typography.css'
 
 type Status = 'ready' | 'running' | 'paused' | 'complete'
 type Customer = { id: string; name: string; email: string; phone: string; status: 'valid' | 'duplicate' | 'invalid' }
