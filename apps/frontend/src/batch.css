@@ -1,0 +1,37 @@
+.table-wrap {
+  position: relative;
+  transition: opacity 200ms ease;
+}
+
+.table-loading {
+  opacity: 0.48;
+  pointer-events: none;
+}
+
+.empty-state {
+  padding: 30px;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: center;
+}
+
+.table-footer > div {
+  display: flex;
+  gap: 6px;
+}
+
+.table-footer button {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.table-footer button:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.table-footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
