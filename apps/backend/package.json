@@ -1,8 +1,8 @@
 {
-  "name": "backend",
+  "name": "@streamforge/backend",
   "version": "0.0.1",
-  "description": "",
-  "author": "",
+  "description": "Memory-safe streaming CSV ingestion API with resumable checkpoints",
+  "author": "Md. Tanjir Mahabub",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {

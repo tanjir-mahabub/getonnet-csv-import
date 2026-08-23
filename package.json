@@ -1,11 +1,14 @@
 {
-  "name": "getonnet-csv-import",
+  "name": "streamforge-csv-platform",
   "private": true,
   "packageManager": "pnpm@10.28.2",
   "scripts": {
     "setup": "pnpm --filter backend setup",
     "dev": "pnpm --parallel --filter backend --filter frontend dev",
     "backend": "pnpm --filter backend dev",
-    "frontend": "pnpm --filter frontend dev"
+    "frontend": "pnpm --filter @streamforge/frontend dev",
+    "build": "pnpm --filter @streamforge/frontend build && pnpm --filter @streamforge/backend build",
+    "lint": "pnpm --filter @streamforge/frontend lint && pnpm --filter @streamforge/backend lint",
+    "test": "pnpm --filter @streamforge/backend test -- --runInBand"
   }
 }
