@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
+import './batch.css'
 
 type Status = 'ready' | 'running' | 'paused' | 'complete'
 type Customer = { id: string; name: string; email: string; phone: string; status: 'valid' | 'duplicate' | 'invalid' }
@@ -33,6 +34,8 @@ export default function App() {
   const [customers, setCustomers] = useState(seedCustomers)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'all' | Customer['status']>('all')
+  const [batch, setBatch] = useState(0)
+  const [loadingBatch, setLoadingBatch] = useState(false)
   const [dark, setDark] = useState(false)
   const [dragging, setDragging] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -59,6 +62,9 @@ export default function App() {
     const matches = `${customer.name} ${customer.email} ${customer.phone}`.toLowerCase().includes(query.toLowerCase())
     return matches && (filter === 'all' || customer.status === filter)
   }), [customers, filter, query])
+  const batchSize = 8
+  const batchCount = Math.max(1, Math.ceil(filtered.length / batchSize))
+  const visibleCustomers = filtered.slice(batch * batchSize, (batch + 1) * batchSize)
 
   const acceptFile = (file?: File) => {
     if (!file) return
@@ -71,7 +77,26 @@ export default function App() {
   const onDrop = (event: DragEvent) => { event.preventDefault(); setDragging(false); acceptFile(event.dataTransfer.files[0]) }
   const onFile = (event: ChangeEvent<HTMLInputElement>) => acceptFile(event.target.files?.[0])
   const start = () => { if (status === 'complete') setProgress(0); setStatus('running') }
-  const reset = () => { setStatus('ready'); setProgress(0); setFileName('customers-2m.csv'); setRows(2_000_000); setCustomers(seedCustomers) }
+  const reset = () => { setStatus('ready'); setProgress(0); setFileName('customers-2m.csv'); setRows(2_000_000); setCustomers(seedCustomers); setBatch(0) }
+  const loadNextBatch = () => {
+    if (loadingBatch) return
+    setLoadingBatch(true)
+    window.setTimeout(() => {
+      if (batch + 1 < batchCount) {
+        setBatch(current => current + 1)
+      } else {
+        const offset = customers.length
+        const next = seedCustomers.slice(0, batchSize).map((customer, index) => ({
+          ...customer,
+          id: `CUS-${String(offset + index + 1042).padStart(5, '0')}`,
+          email: customer.email.replace('@', `+batch${batchCount}@`),
+        }))
+        setCustomers(current => [...current, ...next])
+        setBatch(batchCount)
+      }
+      setLoadingBatch(false)
+    }, 280)
+  }
 
   return <div className="shell">
     <aside>
@@ -107,9 +132,9 @@ export default function App() {
           </article>
         </section>
 
-        <section className="panel records" id="records"><div className="panel-heading"><div><p className="eyebrow">Imported records</p><h2>Customer data</h2></div><div className="record-tools"><label>{icon('search')}<input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search records"/></label><select value={filter} onChange={e=>setFilter(e.target.value as typeof filter)}><option value="all">All records</option><option value="valid">Valid</option><option value="duplicate">Duplicates</option><option value="invalid">Invalid</option></select></div></div>
-          <div className="table-wrap"><table><thead><tr><th>Customer</th><th>Email</th><th>Phone</th><th>Record ID</th><th>Status</th></tr></thead><tbody>{filtered.slice(0,8).map(customer=><tr key={customer.id}><td><span className="avatar">{customer.name.split(' ').map(x=>x[0]).join('')}</span><strong>{customer.name}</strong></td><td>{customer.email}</td><td>{customer.phone}</td><td><code>{customer.id}</code></td><td><span className={`row-status ${customer.status}`}><i/>{customer.status}</span></td></tr>)}</tbody></table></div>
-          <div className="table-footer"><span>Showing {Math.min(8,filtered.length)} of {customers.length.toLocaleString()} loaded demo records</span><button onClick={()=>setCustomers([...customers,...seedCustomers.map((c,i)=>({...c,id:`CUS-${customers.length+i+2000}`}))])}>Load next batch</button></div>
+        <section className="panel records" id="records"><div className="panel-heading"><div><p className="eyebrow">Imported records</p><h2>Customer data</h2></div><div className="record-tools"><label>{icon('search')}<input value={query} onChange={e=>{setQuery(e.target.value);setBatch(0)}} placeholder="Search records"/></label><select value={filter} onChange={e=>{setFilter(e.target.value as typeof filter);setBatch(0)}}><option value="all">All records</option><option value="valid">Valid</option><option value="duplicate">Duplicates</option><option value="invalid">Invalid</option></select></div></div>
+          <div className={`table-wrap ${loadingBatch ? 'table-loading' : ''}`}><table><thead><tr><th>Customer</th><th>Email</th><th>Phone</th><th>Record ID</th><th>Status</th></tr></thead><tbody>{visibleCustomers.map(customer=><tr key={customer.id}><td><span className="avatar">{customer.name.split(' ').map(x=>x[0]).join('')}</span><strong>{customer.name}</strong></td><td>{customer.email}</td><td>{customer.phone}</td><td><code>{customer.id}</code></td><td><span className={`row-status ${customer.status}`}><i/>{customer.status}</span></td></tr>)}</tbody></table>{visibleCustomers.length === 0 && <div className="empty-state">No records match the current filters.</div>}</div>
+          <div className="table-footer"><span>Batch {Math.min(batch + 1, batchCount)} · showing {visibleCustomers.length} of {filtered.length.toLocaleString()} matching records</span><div><button disabled={batch === 0 || loadingBatch} onClick={() => setBatch(current => Math.max(0, current - 1))}>Previous</button><button disabled={loadingBatch} onClick={loadNextBatch}>{loadingBatch ? 'Loading…' : batch + 1 < batchCount ? 'Next batch' : 'Load more records'}</button></div></div>
         </section>
 
         <section className="architecture" id="architecture"><div><p className="eyebrow">Architecture</p><h2>Built to stay responsive<br/>under real load.</h2><p>The processing path applies backpressure from disk to database, stores durable checkpoints, and keeps UI rendering independent from dataset size.</p></div><div className="architecture-flow"><div><span>01</span><strong>Read stream</strong><small>Bounded chunks</small></div><b>→</b><div><span>02</span><strong>Validate</strong><small>Schema + dedupe</small></div><b>→</b><div><span>03</span><strong>Batch write</strong><small>Idempotent commits</small></div><b>→</b><div><span>04</span><strong>Checkpoint</strong><small>Resume safely</small></div></div></section>
